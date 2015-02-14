@@ -8,39 +8,54 @@ import (
 )
 
 var (
-	Port           string = "5555"
-	ChanBufferSize        = 16
-	FPS                   = 50
+	ChanBufferSize = 1024
+	FPS            = 50
 )
 
 type VNCServer struct {
 	isConnected    bool // only one client allowed to connect
+	port           string
 	client         *Client
 	errorChan      chan struct{}
 	disconnectChan chan struct{}
+	// message handlers
+
+	// encoding handlers
+
 	// frame buffer
 	screenShotService *scrShotService
 	keyboardService   *keybdService
 	pointerService    *mouseService
 }
 
-func CreateServer() *VNCServer {
+func CreateServer(port string) *VNCServer {
 	var server VNCServer
 	server.isConnected = false
+	server.port = port
 	server.errorChan = make(chan struct{}, ChanBufferSize)
 	server.disconnectChan = make(chan struct{}, ChanBufferSize)
 
 	server.pointerService = &mouseService{}
 	server.pointerService.Init()
+
 	server.keyboardService = &keybdService{}
 	server.keyboardService.Init()
+
 	server.screenShotService = &scrShotService{}
 	server.screenShotService.Init(&server)
 	return &server
 }
 
+func (s *VNCServer) startServices() {
+	go s.pointerService.Run()
+	go s.keyboardService.Run()
+	go s.screenShotService.Run()
+}
+
 func (s *VNCServer) Run() {
-	ln, err := net.Listen("tcp", ":"+Port)
+	s.startServices()
+
+	ln, err := net.Listen("tcp", ":"+s.port)
 	if err != nil {
 		log.Println(err)
 	}
@@ -55,7 +70,6 @@ func (s *VNCServer) Run() {
 			log.Println("Server already connected, sorry")
 			// send something appropriate to the client maybe ?
 		} else {
-			log.Println("server connected")
 			s.isConnected = true
 			s.client = newClient(s, conn)
 			go s.client.handle()
@@ -67,33 +81,3 @@ func (s *VNCServer) isSupportedEncoding(encoding int32) bool {
 	// TODO this method should go to server class
 	return true
 }
-
-func makeScreenshotRGBA() []byte {
-	return []byte("sucker!")
-}
-
-/*func (s *VNCServer) HandleScreenshots() {
-	//testChan := make(chan struct{}, 1)
-	working := false
-
-	for {
-		select {
-		case <-s.requestUpdate:
-			if !working {
-				go func() {
-					// for now assuming that update requests will ask for full screens
-					// need to think what to do with requests of smaller rectangles and how to optimize that
-					working = true
-					res := makeScreenshotRGBA()
-					s.client.frameUpdatesChan <- res
-					time.Sleep(time.Second / time.Duration(FPS))
-					working = false
-				}()
-			}
-		case <-s.disconnectChan:
-		case <-s.errorChan:
-			return
-		}
-
-	}
-}*/

@@ -1,5 +1,9 @@
 package VNC
 
+import (
+	"log"
+)
+
 /*
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,30 +18,30 @@ package VNC
 
 void HandleMouse(unsigned short x, unsigned short y, unsigned char flags, unsigned char state)
 {
+	// TODO try post message way
 	DWORD lflags = 0;
+	INPUT input;
+	DWORD lflags2 = 0;
+
 	DWORD wheelMove = (flags & MOUSE_TYPE_SCROLL_UP) ? WHEEL_DELTA :
 		((flags & MOUSE_TYPE_SCROLL_DOWN) ? -WHEEL_DELTA : 0);
-	lflags |= ((flags & MOUSE_TYPE_LEFT) ?
-		((state & MOUSE_TYPE_LEFT) ? 0 : MOUSEEVENTF_LEFTDOWN) :
-		((state & MOUSE_TYPE_LEFT) ? 0 : MOUSEEVENTF_LEFTUP));
-	lflags |= ((flags & MOUSE_TYPE_RIGHT) ?
-		((state & MOUSE_TYPE_RIGHT) ? 0 : MOUSEEVENTF_RIGHTDOWN) :
-		((state & MOUSE_TYPE_RIGHT) ? 0 : MOUSEEVENTF_RIGHTUP));
-	lflags |= ((flags & MOUSE_TYPE_MIDDLE) ?
-		((state & MOUSE_TYPE_MIDDLE) ? 0 : MOUSEEVENTF_MIDDLEDOWN) :
-		((state & MOUSE_TYPE_MIDDLE) ? 0 : MOUSEEVENTF_MIDDLEUP));
+	lflags |= (flags & MOUSE_TYPE_LEFT) ? MOUSEEVENTF_LEFTDOWN :
+		((state & MOUSE_TYPE_LEFT) ? MOUSEEVENTF_LEFTUP : 0);
+	lflags |= (flags & MOUSE_TYPE_RIGHT) ? MOUSEEVENTF_RIGHTDOWN :
+		((state & MOUSE_TYPE_RIGHT) ? MOUSEEVENTF_RIGHTUP : 0);
+	lflags |= (flags & MOUSE_TYPE_MIDDLE) ? MOUSEEVENTF_MIDDLEDOWN :
+		((state & MOUSE_TYPE_MIDDLE) ? MOUSEEVENTF_MIDDLEUP : 0);
 	lflags |= (flags & MOUSE_TYPE_SCROLL_UP) ? MOUSEEVENTF_WHEEL : 0;
 	lflags |= (flags & MOUSE_TYPE_SCROLL_DOWN) ? MOUSEEVENTF_WHEEL : 0;
 
 	lflags |= MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
-
 	mouse_event(
-		flags,
+		lflags,
 		x,
 		y,
 		wheelMove,
 		0
-		);
+	);
 }
 
 */
@@ -73,6 +77,24 @@ func (s *mouseService) Request(req *pointerEvent) {
 }
 
 func (s *mouseService) handleMouseEvent(request *pointerEvent) {
-	C.HandleMouse(C.ushort(request.x), C.ushort(request.y), C.uchar(request.buttonMask), C.uchar(s.stateFlags))
-	s.stateFlags = request.buttonMask
+	//log.Println(request)
+	//log.Println("State: ", s.stateFlags)
+	C.HandleMouse(C.ushort(request.X), C.ushort(request.Y), C.uchar(request.ButtonMask), C.uchar(s.stateFlags))
+	s.stateFlags = request.ButtonMask
+}
+
+func TestRat() {
+	var e = pointerEvent{}
+	e.X = 30000
+	e.Y = 30000
+	e.ButtonMask = C.MOUSE_TYPE_LEFT
+	var state uint8 = 0
+
+	C.HandleMouse(C.ushort(e.X), C.ushort(e.Y), C.uchar(e.ButtonMask), C.uchar(state))
+
+	C.Sleep(2000)
+	e.ButtonMask = 0
+	C.HandleMouse(C.ushort(e.X), C.ushort(e.Y), C.uchar(e.ButtonMask), C.uchar(state))
+	log.Println("done")
+	C.Sleep(1000)
 }

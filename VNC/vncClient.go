@@ -2,11 +2,12 @@ package VNC
 
 import (
 	"image"
+	"log"
 	"net"
 )
 
 var (
-	MessageTypeFramebufferUpdate uint8  = 0
+	MessageTypeFramebufferUpdate uint8  = FramebufferUpdateRequest
 	EncodingTypeRaw              uint32 = 0
 )
 
@@ -17,21 +18,56 @@ type VNCClient struct {
 }
 
 func NewClient(server net.Conn) *VNCClient {
-	res := VNCClient{}
+	res := &VNCClient{}
 	res.conn = newConn(server)
 	res.frameUpdateChan = make(chan *image.RGBA, ChanBufferSize)
 	res.errorChan = make(chan struct{}, ChanBufferSize)
-	return &res
+	if res.ClientInit() != nil {
+		log.Println("ClientInit failed")
+		return nil
+	}
+	return res
 }
 
-func (c *VNCClient) ClientInit() {
+func (c *VNCClient) ClientInit() error {
+	// handshake
+	//version - request and response
+	c.conn.writeString(v8)
 
+	v := string(c.conn.readBytes(len([]byte(v8))))
+	if v != v8 {
+		log.Println("unsupported version, client")
+	}
+
+	// security type
+	_ = c.conn.readBytes(2)
+
+	c.conn.write(SecurityTypeNone)
+
+	// security message
+	var status uint32
+	c.conn.read(&status)
+	if status == 0 {
+		log.Println("security type check failed")
+	}
+
+	// send client init
+	var shared uint8 = 0
+	c.conn.write(shared)
+
+	// read server init
+	servInit := serverInit{}
+	c.conn.read(&servInit)
+	name := string(c.conn.readBytes(int(servInit.NameLen)))
+	log.Println(name)
+	return nil
 }
 
 func (c *VNCClient) Run() {
 	for {
 		var msgType uint8
 		c.conn.read(&msgType)
+
 		switch msgType {
 		case MessageTypeFramebufferUpdate:
 			c.handleFrameUpdate()
@@ -43,12 +79,13 @@ func (c *VNCClient) Run() {
 }
 func (c *VNCClient) SendFrameBufferUpdateRequest(x, y, width, height uint16) {
 	req := FrameBufferRequest{}
-	req.incremental = 0
-	req.height = height
-	req.width = width
-	req.x = x
-	req.y = y
+	req.Incremental = 0
+	req.Height = height
+	req.Width = width
+	req.X = x
+	req.Y = y
 
+	c.conn.write(FramebufferUpdateRequest)
 	c.conn.write(&req)
 }
 
@@ -57,22 +94,25 @@ func (c *VNCClient) SendSetPixFormat() {
 }
 
 func (c *VNCClient) SendKeyEvent(keycode uint32, press bool) {
+	c.conn.write(KeyEvent)
 	req := keyEvent{}
-	req.keyCode = keycode
+	req.KeyCode = keycode
 	if press {
-		req.downFlag = 1
+		req.DownFlag = 1
 	} else {
-		req.downFlag = 0
+		req.DownFlag = 0
 	}
 
 	c.conn.write(&req)
 }
 
 func (c *VNCClient) SendPointerEvent(x, y uint16, buttonMask uint8) {
+	c.conn.write(PointerEvent)
+
 	req := pointerEvent{}
-	req.x = x
-	req.y = y
-	req.buttonMask = buttonMask
+	req.X = x
+	req.Y = y
+	req.ButtonMask = buttonMask
 
 	c.conn.write(&req)
 }
@@ -81,18 +121,12 @@ func (c *VNCClient) SendSetEncodings() {
 	// ignore this shit
 }
 
-type FrameUpdateRect struct {
-	x, y          uint16
-	width, height uint16
-	encodingType  uint32
-}
-
 func isSupportedEncoding(enc uint32) bool {
 	return enc == EncodingTypeRaw
 }
 
 func (c *VNCClient) getPixels(r *FrameUpdateRect) []byte {
-	return c.conn.readBytes(int(r.width * r.height * 4))
+	return c.conn.readBytes(int(r.Width) * int(r.Height) * 4)
 }
 
 func (c *VNCClient) handleFrameUpdate() {
@@ -104,10 +138,9 @@ func (c *VNCClient) handleFrameUpdate() {
 	for i := 0; i < int(numRects); i++ {
 		rect := FrameUpdateRect{}
 		c.conn.read(&rect)
-
-		if isSupportedEncoding(rect.encodingType) {
+		if isSupportedEncoding(rect.EncodingType) {
 			pixels := c.getPixels(&rect)
-			img := image.NewRGBA(image.Rect(int(rect.x), int(rect.y), int(rect.x+rect.width), int(rect.y+rect.height)))
+			img := image.NewRGBA(image.Rect(int(rect.X), int(rect.Y), int(rect.X+rect.Width), int(rect.Y+rect.Height)))
 			img.Pix = []uint8(pixels)
 			c.frameUpdateChan <- img
 		}

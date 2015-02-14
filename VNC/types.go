@@ -1,17 +1,17 @@
 package VNC
 
 type PixelFormat struct {
-	bitsPerPixel uint8
-	depth        uint8
-	bigEndian    uint8
-	trueColor    uint8
-	redMax       uint16
-	greenMax     uint16
-	blueMax      uint16
-	redShift     uint8
-	greenShift   uint8
-	blueShift    uint8
-	p1, p2, p3   uint8 // padding bytes
+	BitsPerPixel uint8
+	Depth        uint8
+	BigEndian    uint8
+	TrueColor    uint8
+	RedMax       uint16
+	GreenMax     uint16
+	BlueMax      uint16
+	RedShift     uint8
+	GreenShift   uint8
+	BlueShift    uint8
+	P1, P2, P3   uint8 // padding bytes
 }
 
 var (
@@ -19,23 +19,29 @@ var (
 )
 
 type serverInit struct {
-	width, height uint16
-	pixFormat     PixelFormat
-	nameLen       uint32
+	Width, Height uint16
+	PixFormat     PixelFormat
+	NameLen       uint32
 }
 
 type FrameBufferRequest struct {
-	incremental         uint8
-	x, y, width, height uint16
+	Incremental         uint8
+	X, Y, Width, Height uint16
+}
+
+type FrameUpdateRect struct {
+	X, Y          uint16
+	Width, Height uint16
+	EncodingType  uint32
 }
 
 type keyEvent struct {
-	downFlag uint8
-	p1, p2   uint8
-	keyCode  uint32
+	DownFlag uint8
+	P1, P2   uint8
+	KeyCode  uint32
 }
 
 type pointerEvent struct {
-	buttonMask uint8
-	x, y       uint16
+	ButtonMask uint8
+	X, Y       uint16
 }

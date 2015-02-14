@@ -72,25 +72,43 @@ func (c *Client) WriteString(str string) {
 	c.conn.writeString(str)
 }
 
-func (this *Client) handle() {
-	// TODO handle connection errors
-	var e error
-	e = this.handshake()
-	if e != nil {
-		failFatal("handshake failed")
-	}
-	e = this.init()
-	if e != nil {
-		failFatal("init client failed")
-	}
+func (c *Client) SendFrameUpdate(img []byte) {
+	c.Write(FramebufferUpdateRequest) // message type
 
+	c.Write(FramebufferUpdateRequest) // padding
+	var numRects uint16 = 1
+	c.Write(numRects)
+
+	rect := FrameUpdateRect{}
+	rect.EncodingType = EncodingTypeRaw
+	width, height, _ := getScreenDimensions()
+	rect.Width = uint16(width)
+	rect.Height = uint16(height)
+	rect.X = uint16(0)
+	rect.Y = uint16(0)
+	c.Write(&rect)
+	c.WriteBytes(img)
+}
+
+func (c *Client) writeService() {
+	for {
+		select {
+		case img := <-c.frameUpdatesChan:
+			//log.Println("frame update serv conn")
+			// send frame update
+			c.SendFrameUpdate(img)
+		}
+	}
+}
+
+func (this *Client) readService() {
 	var messageType uint8
+	var e error
 
 	for {
-
 		// handle further requests
 		// reading from the connection must be synchronous
-		this.conn.read(&messageType)
+		this.Read(&messageType)
 		switch messageType {
 		case SetPixelFormat:
 			e = this.handlePixelFormat()
@@ -113,18 +131,34 @@ func (this *Client) handle() {
 	}
 }
 
+func (this *Client) handle() {
+	// TODO handle connection errors
+	var e error
+	e = this.handshake()
+	if e != nil {
+		failFatal("handshake failed")
+	}
+	e = this.init()
+	if e != nil {
+		failFatal("init client failed")
+	}
+
+	go this.writeService()
+	this.readService()
+}
+
 func isSupportedSecurityType(t uint8) bool {
 	return t == SecurityTypeNone
 }
+
 func (this *Client) handshake() error {
 	// send version message
 	this.WriteBytes([]byte(v8))
 
 	// wait for response
 	res := this.ReadBytes(len([]byte(v8)))
-
 	if string(res) != v8 {
-		log.Println("different version, fuck off")
+		log.Println("unsupported version %s", string(res))
 		return nil
 	}
 
@@ -145,8 +179,9 @@ func (this *Client) handshake() error {
 	}
 
 	// send security result
-	result := 1
+	var result uint32 = 1
 	this.conn.write(&result)
+	log.Println("server connected")
 	return nil
 }
 
@@ -158,11 +193,11 @@ func constructServerInit() []byte {
 	// construct fields
 	sInit := serverInit{}
 	width, height, _ := getScreenDimensions()
-	sInit.width = uint16(width)
-	sInit.height = uint16(height)
-	sInit.pixFormat = PixelFormatRGBA
+	sInit.Width = uint16(width)
+	sInit.Height = uint16(height)
+	sInit.PixFormat = PixelFormatRGBA
 	name := "BaiHoi"
-	sInit.nameLen = uint32(len([]byte(name)))
+	sInit.NameLen = uint32(len([]byte(name)))
 
 	// write to buffer
 	buf := &bytes.Buffer{}
@@ -213,7 +248,6 @@ func (this *Client) handleEncodings() error {
 func (this *Client) handleFrameBufferUpdateRequest() error {
 	request := FrameBufferRequest{}
 	this.Read(&request)
-
 	this.server.screenShotService.Request(&request)
 	return nil
 }
@@ -221,7 +255,6 @@ func (this *Client) handleFrameBufferUpdateRequest() error {
 func (this *Client) handleKeyEvent() error {
 	event := keyEvent{}
 	this.Read(&event)
-
 	this.server.keyboardService.Request(&event)
 	return nil
 }

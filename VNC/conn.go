@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"io"
+	//"log"
 	"net"
 	"sync"
 	//"unsafe"
@@ -57,6 +58,7 @@ func (c *Conn) writeBytes(data []byte) {
 	if e != nil || n != len(data) {
 		failFatal("writeBytes failed: ", e)
 	}
+	//log.Println(n)
 	c.writer.Flush()
 }
 

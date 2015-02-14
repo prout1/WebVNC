@@ -2,8 +2,9 @@ package VNC
 
 import (
 	"image"
+	//"log"
 	"reflect"
-	"sync"
+	//"sync"
 	"time"
 	"unsafe"
 )
@@ -41,6 +42,17 @@ void ScreenCap(void * ScreenData)
 
 	GetDIBits(hdcMem, hBitmap, 0, ScreenY, ScreenData, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
 
+	{
+		// flipping red and blue byte values, because Go needs them in different order than this
+		int i, lim = ScreenX*ScreenY;
+		int * buf = (int*)ScreenData;
+		int y;
+
+		for(i=0; i<lim; ++i) {
+			y = buf[i];
+			buf[i] = ((y & 0xff00ff00) | ((y & 0x000000ff) << 16) | ((y & 0x00ff0000) >> 16));
+		}
+	}
 	ReleaseDC(GetDesktopWindow(), hScreen);
 	DeleteDC(hdcMem);
 	DeleteObject(hBitmap);
@@ -52,7 +64,6 @@ import "C"
 type scrShotService struct {
 	currentShot *image.RGBA
 	server      *VNCServer
-	ssLock      sync.RWMutex
 	timeout     time.Duration
 	requests    chan *FrameBufferRequest
 }
@@ -60,18 +71,12 @@ type scrShotService struct {
 func (s *scrShotService) Init(serv *VNCServer) {
 	s.server = serv
 	s.currentShot = nil
-}
-
-func free(arr []byte) {
-	if arr != nil {
-		h := (*reflect.SliceHeader)(unsafe.Pointer(&arr))
-		C.free(unsafe.Pointer(h.Data))
-	}
+	s.requests = make(chan *FrameBufferRequest, ChanBufferSize)
+	s.timeout = 2000 * time.Millisecond
 }
 
 func (s *scrShotService) Run() {
 	working := false
-
 	for {
 		select {
 		case <-s.requests:
@@ -80,11 +85,8 @@ func (s *scrShotService) Run() {
 					// for now assuming that update requests will ask for full screens
 					// need to think what to do with requests of smaller rectangles and how to optimize that
 					working = true
-					cs := s.currentShot.Pix
-					// TODO manage thread safety of this delete. what happens if delete occurs during send operation ?
-					free(cs)
-					s.currentShot = s.captureScreen()
-					s.server.client.frameUpdatesChan <- s.currentShot.Pix
+					//log.Println("screen update")
+					s.server.client.frameUpdatesChan <- s.captureScreen().Pix
 					working = false
 				}()
 			}
@@ -112,9 +114,9 @@ func getScreenDimensions() (width, height, bytesPerPixel int32) {
 	return
 }
 
-func captureScreenInternal() *image.RGBA {
+func CaptureScreenInternal() *image.RGBA {
 	width, height, bytesPerPixel := getScreenDimensions()
-	pix := make([]byte, width*height*bytesPerPixel)
+	pix := make([]byte, width*height*bytesPerPixel, width*height*bytesPerPixel)
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&pix))
 	pixelData := unsafe.Pointer(h.Data)
 
@@ -125,24 +127,24 @@ func captureScreenInternal() *image.RGBA {
 	res := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
 	res.Pix = pix
 	return res
-	// TODO FREE pixelData when necessary
 }
 
 func (s *scrShotService) captureScreen() *image.RGBA {
 	// doing screen capturing at minimum s.timeout
-	var wg sync.WaitGroup
-	var res *image.RGBA
-	go func() {
-		wg.Add(1)
-		res = captureScreenInternal()
-		wg.Done()
-	}()
-	go func() {
-		wg.Add(1)
-		time.Sleep(s.timeout)
-		wg.Done()
-	}()
+	//var wg sync.WaitGroup
+	var res *image.RGBA = nil
+	//log.Println(s.timeout)
+	//go func() {
+	//	wg.Add(1)
+	res = CaptureScreenInternal()
+	//	wg.Done()
+	//}()
+	//go func() {
+	//	wg.Add(1)
+	//	time.Sleep(s.timeout)
+	//	wg.Done()
+	//}()
 
-	wg.Wait()
+	//wg.Wait()
 	return res
 }
