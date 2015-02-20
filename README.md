@@ -10,5 +10,35 @@ the VNC server, it's input can come from anywhere - service on the client machin
 messages from the browser via websocket and using the client api to send the data to the server in a VNC standart compatible way.
 - Browser client - javascript client layer, used to capture user input and send according JSON messages to the websocket proxy.
 
-Usage:
-// not sure exactly of the install process yet
+##Install: 
+```
+go get "https://github.com/prout1/WebVNC.git"
+```
+
+##Usage:
+
+```go
+package main
+
+import (
+	"WebVNC/VNC"
+	"fmt"
+	"net"
+)
+
+func main() {
+	vncServer := VNC.CreateServer("5555")
+	go vncServer.Run()
+
+	// create client connection
+	conn, err := net.Dial("tcp", "127.0.0.1:5555")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	proxy := VNC.CreateProxy(conn)
+	proxy.Run()
+}
+
+```
