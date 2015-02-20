@@ -49,18 +49,19 @@ import "C"
 
 // mouse input
 type mouseService struct {
-	requests   chan *pointerEvent
-	stateFlags uint8 // flags indicating currently pressed keys and stuff
+	requests       chan *pointerEvent
+	stateFlags     uint8 // flags indicating currently pressed keys and stuff
+	disconnectChan chan struct{}
 }
 
 func (s *mouseService) Stop() {
-
+	s.disconnectChan <- struct{}{}
 }
 
 func (s *mouseService) Init() {
 	s.requests = make(chan *pointerEvent, ChanBufferSize)
 	s.stateFlags = 0
-	// TODO manage keycodes
+	s.disconnectChan = make(chan struct{}, ChanBufferSize)
 }
 
 func (s *mouseService) Run() {
@@ -68,6 +69,8 @@ func (s *mouseService) Run() {
 		select {
 		case req := <-s.requests:
 			s.handleMouseEvent(req)
+		case <-s.disconnectChan:
+			return
 		}
 	}
 }

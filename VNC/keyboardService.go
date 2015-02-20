@@ -31,26 +31,10 @@ void ReleaseKey(unsigned int key)
 import "C"
 
 type keybdService struct {
-	server     *VNCServer
-	requests   chan *keyEvent
-	xToVKeyMap map[uint32]uint32
-}
-
-func (s *keybdService) Run() {
-	for {
-		select {
-		case req := <-s.requests:
-			s.handleKeyEvent(req.KeyCode, req.DownFlag == 0)
-		}
-	}
-}
-
-func (s *keybdService) Request(event *keyEvent) {
-	s.requests <- event
-}
-
-func (s *keybdService) Stop() {
-
+	server         *VNCServer
+	disconnectChan chan struct{}
+	requests       chan *keyEvent
+	xToVKeyMap     map[uint32]uint32
 }
 
 func FillMap(m map[uint32]uint32) {
@@ -160,27 +144,54 @@ func (s *keybdService) Init() {
 	s.xToVKeyMap = make(map[uint32]uint32)
 	FillMap(s.xToVKeyMap)
 	s.requests = make(chan *keyEvent, ChanBufferSize)
-	// TODO manage keycodes
+	s.disconnectChan = make(chan struct{}, ChanBufferSize)
 }
 
-func PressKey(keyCode uint32) {
+func (s *keybdService) Run() {
+	for {
+		select {
+		case req := <-s.requests:
+			s.handleKeyEvent(req.KeyCode, req.DownFlag == 0)
+		case <-s.disconnectChan:
+			return
+		}
+	}
+}
+
+func (s *keybdService) Request(event *keyEvent) {
+	s.requests <- event
+}
+
+func (s *keybdService) Stop() {
+	s.disconnectChan <- struct{}{}
+}
+
+func pressKey(keyCode uint32) {
 	C.PressKey(C.uint(keyCode))
 }
 
-func ReleaseKey(keyCode uint32) {
+func releaseKey(keyCode uint32) {
 	C.ReleaseKey(C.uint(keyCode))
 }
 
-func (s *keybdService) getVKey(keyCode uint32) uint32 {
-	return s.xToVKeyMap[keyCode]
+func (s *keybdService) getVKey(keyCode uint32) (uint32, error) {
+
+	res, ok := s.xToVKeyMap[keyCode]
+	if !ok {
+		err := logError("Unexpected keycode: %d", keyCode)
+		return 0, err
+	}
+	return res, nil
 }
 
 func (s *keybdService) handleKeyEvent(keyCode uint32, pressFlag bool) {
 	//log.Println(keyCode, pressFlag)
-	vKey := s.getVKey(keyCode)
-	if pressFlag {
-		PressKey(vKey)
-	} else {
-		ReleaseKey(vKey)
+	vKey, err := s.getVKey(keyCode)
+	if err == nil {
+		if pressFlag {
+			pressKey(vKey)
+		} else {
+			releaseKey(vKey)
+		}
 	}
 }

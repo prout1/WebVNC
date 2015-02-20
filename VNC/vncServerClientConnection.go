@@ -185,10 +185,6 @@ func (this *Client) handshake() error {
 	return nil
 }
 
-func getScreenDim() (uint16, uint16) {
-	return 0, 0
-}
-
 func constructServerInit() []byte {
 	// construct fields
 	sInit := serverInit{}

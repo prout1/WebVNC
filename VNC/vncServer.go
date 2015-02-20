@@ -16,7 +16,7 @@ type VNCServer struct {
 	isConnected    bool // only one client allowed to connect
 	port           string
 	client         *Client
-	errorChan      chan struct{}
+	errorChan      chan error
 	disconnectChan chan struct{}
 	// message handlers
 
@@ -32,7 +32,7 @@ func CreateServer(port string) *VNCServer {
 	var server VNCServer
 	server.isConnected = false
 	server.port = port
-	server.errorChan = make(chan struct{}, ChanBufferSize)
+	server.errorChan = make(chan error, ChanBufferSize)
 	server.disconnectChan = make(chan struct{}, ChanBufferSize)
 
 	server.pointerService = &mouseService{}
@@ -64,11 +64,11 @@ func (s *VNCServer) Run() {
 		if err != nil {
 			log.Println("VNCServer.Run: ", err)
 			// panic
+			return
 		}
 
 		if s.isConnected {
 			log.Println("Server already connected, sorry")
-			// send something appropriate to the client maybe ?
 		} else {
 			s.isConnected = true
 			s.client = newClient(s, conn)
@@ -77,7 +77,16 @@ func (s *VNCServer) Run() {
 	}
 }
 
+func (s *VNCServer) Stop() {
+	s.keyboardService.Stop()
+	s.pointerService.Stop()
+	s.screenShotService.Stop()
+}
+
+func (s *VNCServer) sendError(err error) {
+	s.errorChan <- err
+}
+
 func (s *VNCServer) isSupportedEncoding(encoding int32) bool {
-	// TODO this method should go to server class
 	return true
 }

@@ -62,10 +62,11 @@ void ScreenCap(void * ScreenData)
 import "C"
 
 type scrShotService struct {
-	currentShot *image.RGBA
-	server      *VNCServer
-	timeout     time.Duration
-	requests    chan *FrameBufferRequest
+	currentShot    *image.RGBA
+	server         *VNCServer
+	timeout        time.Duration
+	requests       chan *FrameBufferRequest
+	disconnectChan chan struct{}
 }
 
 func (s *scrShotService) Init(serv *VNCServer) {
@@ -73,6 +74,7 @@ func (s *scrShotService) Init(serv *VNCServer) {
 	s.currentShot = nil
 	s.requests = make(chan *FrameBufferRequest, ChanBufferSize)
 	s.timeout = 2000 * time.Millisecond
+	s.disconnectChan = make(chan struct{}, ChanBufferSize)
 }
 
 func (s *scrShotService) Run() {
@@ -91,16 +93,15 @@ func (s *scrShotService) Run() {
 				}()
 			}
 			//TODO : add disconnect and error chan here as well
-		case <-s.server.disconnectChan:
-		case <-s.server.errorChan:
+		case <-s.disconnectChan:
 			return
 		}
 
 	}
 }
 
-func (s *scrShotService) Stop(serv *VNCServer) {
-
+func (s *scrShotService) Stop() {
+	s.disconnectChan <- struct{}{}
 }
 
 func (s *scrShotService) Request(req *FrameBufferRequest) {

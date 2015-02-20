@@ -25,9 +25,11 @@ function sendMouseUpdate(ws) {
 }
 function handleMouse(canvas, ws) {
     var mouseEvent = function (e, pressFlag) {
+        var mouseX = e.pageX - canvas.offsetLeft;
+        var mouseY = e.pageY - canvas.offsetTop;
         mouseState.buttons[buttonMap[e.button.toString()]] = pressFlag;
-        mouseState.x = Math.round((e.x / canvas.width ) * 65536);
-        mouseState.y = Math.round((e.y / canvas.height) * 65536);
+        mouseState.x = Math.round((mouseX * 65536) / canvas.width);
+        mouseState.y = Math.round((mouseY * 65536) / canvas.height);
         sendMouseUpdate(ws);
         console.log(mouseState.x + " " + mouseState.y);
     }
@@ -48,6 +50,14 @@ function handleMouse(canvas, ws) {
         mouseState.buttons[scrollUp] = mouseState.buttons[scrollDown] = false;
     });
 
+    canvas.addEventListener("mousemove", function (e) {
+        var mouseX = e.pageX - canvas.offsetLeft;
+        var mouseY = e.pageY - canvas.offsetTop;
+        mouseState.x = Math.round((mouseX * 65536) / canvas.width);
+        mouseState.y = Math.round((mouseY * 65536) / canvas.height);
+        sendMouseUpdate(ws);
+    });
+
     canvas.onmouseup = function(e) {
         mouseEvent(e, false);
     }
@@ -57,7 +67,7 @@ function handleKeyboard(canvas, ws) {
     var keyBdEvent = function (e, pressFlag) {
         ws.send(JSON.stringify({
             type: "ke",
-            keyCode: e.keyCode,
+            keyCode: e.keyCode, 
             press: pressFlag
         }));
     }
@@ -75,14 +85,14 @@ function handleUpdates(canvas, ws) {
     setInterval(function () {
         ws.send(JSON.stringify({ type: "re" })); // frame update request
         
-    }, 80);
+    }, 100);
 }
 
 window.onload = function () {
     document.body = document.createElement("body");
     var canvas = document.createElement("canvas");
-    var width = (1366*11)/17,
-        height = (768*11)/17
+    var width = (1366*3)/4,
+        height = (768*3)/4
     canvas.setAttribute("width",width.toString());
     canvas.setAttribute("height", height.toString());
     var ctx = canvas.getContext("2d");
